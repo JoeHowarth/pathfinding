@@ -1,592 +1,686 @@
-#include <vector>
-#include <queue>
-#include <tuple>
-#include <cstdlib>
-#include <climits>
-#include <random>
 #include "pathfinders.h"
 
+#include <climits>
+#include <cstdlib>
+#include <queue>
+#include <random>
+#include <tuple>
+#include <vector>
 
-int ExploredNodes;
-std::vector<int> Landmarks;
+int                           ExploredNodes;
+std::vector<int>              Landmarks;
 std::vector<std::vector<int>> LD;
 
-int BFSFindPath(const int nStartX, const int nStartY,
-     const int nTargetX, const int nTargetY,
-     const unsigned char* pMap, const int nMapWidth, const int nMapHeight,
-     int* pOutBuffer, const int nOutBufferSize) {
+int BFSFindPath(
+    const int            nStartX,
+    const int            nStartY,
+    const int            nTargetX,
+    const int            nTargetY,
+    const unsigned char* pMap,
+    const int            nMapWidth,
+    const int            nMapHeight,
+    int*                 pOutBuffer,
+    const int            nOutBufferSize
+) {
+    auto idx = [nMapWidth](int x, int y) { return x + y * nMapWidth; };
 
-  auto idx = [nMapWidth](int x, int y) {
-    return x + y*nMapWidth;
-  };
+    const int n         = nMapWidth * nMapHeight;
+    const int startPos  = idx(nStartX, nStartY),
+              targetPos = idx(nTargetX, nTargetY);
 
-  const int n = nMapWidth*nMapHeight;
-  const int startPos = idx(nStartX, nStartY), targetPos = idx(nTargetX, nTargetY);
-
-  ExploredNodes = 0;
-  std::vector<int> p(n), d(n, INT_MAX);
-  d[startPos] = 0;
-  std::queue<int> q;
-  q.push(startPos);
-  while (!q.empty()) {
-    int u = q.front(); q.pop(); ExploredNodes++;
-    for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
-      int v = u + e;
-      if ((e == 1 && (v % nMapWidth == 0)) || (e == -1 && (u % nMapWidth == 0)))
-        continue;
-      if (0 <= v && v < n && d[v] == INT_MAX && pMap[v]) {
-        p[v] = u;
-        d[v] = d[u] + 1;
-        if (v == targetPos)
-          goto end;
-        q.push(v);
-      }
-    }
-  }
- end:
-
-  if (d[targetPos] == INT_MAX) {
-    return -1;
-  } else if (d[targetPos] <= nOutBufferSize) {
-    int curr = targetPos;
-    for (int i = d[targetPos] - 1; i >= 0; i--) {
-      pOutBuffer[i] = curr;
-      curr = p[curr];
-    }
-    return d[targetPos];
-  }
-
-  return d[targetPos];
-}
-
-int BFSFindPathDiag(const int nStartX, const int nStartY,
-        const int nTargetX, const int nTargetY,
-        const unsigned char* pMap, const int nMapWidth, const int nMapHeight,
-        int* pOutBuffer, const int nOutBufferSize) {
-
-  auto idx = [nMapWidth](int x, int y) {
-    return x + y*nMapWidth;
-  };
-
-  const int n = nMapWidth*nMapHeight;
-  const int startPos = idx(nStartX, nStartY), targetPos = idx(nTargetX, nTargetY);
-
-  ExploredNodes = 0;
-  std::vector<int> p(n), d(n, INT_MAX);
-  std::queue<int> q;
-  d[startPos] = 0;
-  q.push(startPos);
-  while (!q.empty()) {
-    int u = q.front(); q.pop(); ExploredNodes++;
-    for (auto e : {-nMapWidth-1, -nMapWidth+1, +nMapWidth-1, +nMapWidth+1,
-          +1, -1, +nMapWidth, -nMapWidth}) {
-      int v = u + e;
-      if (((e == 1 || e == -nMapWidth+1 || e == nMapWidth+1) && (v % nMapWidth == 0))
-          || ((e == -1 || e == -nMapWidth-1 || e == nMapWidth-1) && (u % nMapWidth == 0)))
-        continue;
-      if (0 <= v && v < n && d[v] == INT_MAX && pMap[v]) {
-        p[v] = u;
-        d[v] = d[u] + 1;
-        if (v == targetPos)
-          goto end;
-        q.push(v);
-      }
-    }
-  }
-  end:
-
-  if (d[targetPos] == INT_MAX) {
-    return -1;
-  } else if (d[targetPos] <= nOutBufferSize) {
-    int curr = targetPos;
-    for (int i = d[targetPos] - 1; i >= 0; i--) {
-      pOutBuffer[i] = curr;
-      curr = p[curr];
-    }
-    return d[targetPos];
-  }
-
-  return d[targetPos]; // buffer size too small
-}
-
-int AStarFindPath(const int nStartX, const int nStartY,
-      const int nTargetX, const int nTargetY,
-      const unsigned char* pMap, const int nMapWidth, const int nMapHeight,
-      int* pOutBuffer, const int nOutBufferSize) {
-
-  auto idx = [nMapWidth](int x, int y) {
-    return x + y*nMapWidth;
-  };
-
-  auto h = [=](int u) -> int { // lower bound distance to target from u
-    int x = u % nMapWidth, y = u / nMapWidth;
-    return abs(x-nTargetX) + abs(y-nTargetY);
-  };
-
-  const int n = nMapWidth*nMapHeight;
-  const int startPos = idx(nStartX, nStartY), targetPos = idx(nTargetX, nTargetY);
-
-  int discovered = 0; ExploredNodes = 0;
-  std::vector<int> p(n), d(n, INT_MAX);
-  std::priority_queue<std::tuple<int, int, int>,
-      std::vector<std::tuple<int, int, int>>,
-      std::greater<std::tuple<int, int, int>>> pq; // A* with tie breaking
-  d[startPos] = 0;
-  pq.push(std::make_tuple(0 + h(startPos), 0, startPos));
-  while (!pq.empty()) {
-    int u = std::get<2>(pq.top()); pq.pop(); ExploredNodes++;
-    for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
-      int v = u + e;
-      if ((e == 1 && (v % nMapWidth == 0)) || (e == -1 && (u % nMapWidth == 0)))
-        continue;
-      if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
-        p[v] = u;
-        d[v] = d[u] + 1;
-        if (v == targetPos)
-          goto end;
-        pq.push(std::make_tuple(d[v] + h(v), ++discovered, v));
-      }
-    }
-  }
-  end:
-
-  if (d[targetPos] == INT_MAX) {
-    return -1;
-  } else if (d[targetPos] <= nOutBufferSize) {
-    int curr = targetPos;
-    for (int i = d[targetPos] - 1; i >= 0; i--) {
-      pOutBuffer[i] = curr;
-      curr = p[curr];
-    }
-    return d[targetPos];
-  }
-
-  return d[targetPos]; // buffer size too small
-}
-
-int AStarFindPathDiag(const int nStartX, const int nStartY,
-        const int nTargetX, const int nTargetY,
-        const unsigned char* pMap, const int nMapWidth, const int nMapHeight,
-        int* pOutBuffer, const int nOutBufferSize) {
-
-  auto idx = [nMapWidth](int x, int y) {
-    return x + y*nMapWidth;
-  };
-
-  auto h = [=](int u) -> int { // lower bound distance to target from u
-    int x = u % nMapWidth, y = u / nMapWidth;
-    return std::max(abs(x-nTargetX), abs(y-nTargetY));
-  };
-
-  const int n = nMapWidth*nMapHeight;
-  const int startPos = idx(nStartX, nStartY), targetPos = idx(nTargetX, nTargetY);
-
-  int discovered = 0; ExploredNodes = 0;
-  std::vector<int> p(n), d(n, INT_MAX);
-  std::priority_queue<std::tuple<int, int, int>,
-      std::vector<std::tuple<int, int, int>>,
-      std::greater<std::tuple<int, int, int>>> pq; // A* with tie breaking
-  d[startPos] = 0;
-  pq.push(std::make_tuple(0 + h(startPos), 0, startPos));
-  while (!pq.empty()) {
-    int u = std::get<2>(pq.top()); pq.pop(); ExploredNodes++;
-    for (auto e : {-nMapWidth-1, -nMapWidth+1, +nMapWidth-1, +nMapWidth+1,
-          +1, -1, +nMapWidth, -nMapWidth}) {
-      int v = u + e;
-      if (((e == 1 || e == -nMapWidth+1 || e == nMapWidth+1) && (v % nMapWidth == 0))
-            || ((e == -1 || e == -nMapWidth-1 || e == nMapWidth-1) && (u % nMapWidth == 0)))
-        continue;
-      if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
-        p[v] = u;
-        d[v] = d[u] + 1;
-        if (v == targetPos)
-          goto end;
-        pq.push(std::make_tuple(d[v] + h(v), ++discovered, v));
-      }
-    }
-  }
-  end:
-
-  if (d[targetPos] == INT_MAX) {
-    return -1;
-  } else if (d[targetPos] <= nOutBufferSize) {
-    int curr = targetPos;
-    for (int i = d[targetPos] - 1; i >= 0; i--) {
-      pOutBuffer[i] = curr;
-      curr = p[curr];
-    }
-    return d[targetPos];
-  }
-
-  return d[targetPos]; // buffer size too small
-}
-
-void InitializeLandmarks(int k, const unsigned char* pMap, const int nMapWidth, const int nMapHeight) {
-
-  std::vector<int> traversable;
-  for (int i = 0; i < nMapWidth; i++)
-    for (int j = 0; j < nMapHeight; j++)
-      if (pMap[nMapWidth*j + i])
-        traversable.push_back(nMapWidth*j + i);
-
-  while (Landmarks.size() < k) {
-
-    if (Landmarks.empty()) {
-      std::random_device rng;
-      std::uniform_int_distribution<> uniform(0, traversable.size() - 1);
-      Landmarks.push_back(traversable[uniform(rng)]);
-      continue;
-    }
-
-    const int n = nMapWidth*nMapHeight;
+    ExploredNodes = 0;
     std::vector<int> p(n), d(n, INT_MAX);
+    d[startPos] = 0;
     std::queue<int> q;
-    for (auto s : Landmarks) {
-      d[s] = 0;
-      q.push(s);
-    }
-    int farthest = -1, maxdist = -1;
-
+    q.push(startPos);
     while (!q.empty()) {
-      int u = q.front(); q.pop();
-      if (d[u] > maxdist)
-        maxdist = d[u], farthest = u;
-      for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
-        int v = u + e;
-        if ((e == 1 && (v % nMapWidth == 0)) || (e == -1 && (u % nMapWidth == 0)))
-          continue;
-        if (0 <= v && v < n && d[v] == INT_MAX && pMap[v]) {
-          p[v] = u;
-          d[v] = d[u] + 1;
-          q.push(v);
+        int u = q.front();
+        q.pop();
+        ExploredNodes++;
+        for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
+            int v = u + e;
+            if ((e == 1 && (v % nMapWidth == 0)) ||
+                (e == -1 && (u % nMapWidth == 0)))
+                continue;
+            if (0 <= v && v < n && d[v] == INT_MAX && pMap[v]) {
+                p[v] = u;
+                d[v] = d[u] + 1;
+                if (v == targetPos) goto end;
+                q.push(v);
+            }
         }
-      }
     }
+end:
 
-    Landmarks.push_back(farthest); // works well when the graph is not too disconnected
-  }
-
-  LD.resize(Landmarks.size());
-  for (int i = 0; i < Landmarks.size(); i++) {
-    const int n = nMapWidth*nMapHeight;
-    std::vector<int> p(n); LD[i].resize(n, INT_MAX);
-    std::queue<int> q;
-    int s = Landmarks[i];
-    LD[i][s] = 0;
-    q.push(s);
-    while (!q.empty()) {
-      int u = q.front(); q.pop();
-      for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
-        int v = u + e;
-        if ((e == 1 && (v % nMapWidth == 0)) || (e == -1 && (u % nMapWidth == 0)))
-          continue;
-        if (0 <= v && v < n && LD[i][v] == INT_MAX && pMap[v]) {
-          p[v] = u;
-          LD[i][v] = LD[i][u] + 1;
-          q.push(v);
+    if (d[targetPos] == INT_MAX) {
+        return -1;
+    } else if (d[targetPos] <= nOutBufferSize) {
+        int curr = targetPos;
+        for (int i = d[targetPos] - 1; i >= 0; i--) {
+            pOutBuffer[i] = curr;
+            curr          = p[curr];
         }
-      }
+        return d[targetPos];
     }
-  }
-}
 
-int AStarFindPathLandmarks(const int nStartX, const int nStartY,
-        const int nTargetX, const int nTargetY,
-        const unsigned char* pMap, const int nMapWidth, const int nMapHeight,
-        int* pOutBuffer, const int nOutBufferSize) {
-
-  auto idx = [nMapWidth](int x, int y) {
-    return x + y*nMapWidth;
-  };
-
-  const int n = nMapWidth*nMapHeight;
-  const int startPos = idx(nStartX, nStartY), targetPos = idx(nTargetX, nTargetY);
-
-  auto h = [=](int u) { // lower bound distance to target from u
-    int m = 0;
-    for (int i = 0; i < Landmarks.size(); i++) // global std::vector<int> Landmarks
-      m = std::max(m, LD[i][targetPos] - LD[i][u]); // global std::vector<std::vector<int>> LD
-    return m;
-  };
-
-  int discovered = 0; ExploredNodes = 0;
-  std::vector<int> p(n), d(n, INT_MAX);
-  std::priority_queue<std::tuple<int, int, int>,
-      std::vector<std::tuple<int, int, int>>,
-      std::greater<std::tuple<int, int, int>>> pq; // A* with tie breaking
-  d[startPos] = 0;
-  pq.push(std::make_tuple(0 + h(startPos), 0, startPos));
-  while (!pq.empty()) {
-    int u = std::get<2>(pq.top()); pq.pop(); ExploredNodes++;
-    for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
-      int v = u + e;
-      if ((e == 1 && (v % nMapWidth == 0)) || (e == -1 && (u % nMapWidth == 0)))
-        continue;
-      if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
-        p[v] = u;
-        d[v] = d[u] + 1;
-        if (v == targetPos)
-          goto end;
-        pq.push(std::make_tuple(d[v] + h(v), ++discovered, v));
-      }
-    }
-  }
-  end:
-
-  if (d[targetPos] == INT_MAX) {
-    return -1;
-  } else if (d[targetPos] <= nOutBufferSize) {
-    int curr = targetPos;
-    for (int i = d[targetPos] - 1; i >= 0; i--) {
-      pOutBuffer[i] = curr;
-      curr = p[curr];
-    }
     return d[targetPos];
-  }
-
-  return d[targetPos]; // buffer size too small
 }
 
-void InitializeLandmarksDiag(int k, const unsigned char* pMap, const int nMapWidth, const int nMapHeight) {
+int BFSFindPathDiag(
+    const int            nStartX,
+    const int            nStartY,
+    const int            nTargetX,
+    const int            nTargetY,
+    const unsigned char* pMap,
+    const int            nMapWidth,
+    const int            nMapHeight,
+    int*                 pOutBuffer,
+    const int            nOutBufferSize
+) {
+    auto idx = [nMapWidth](int x, int y) { return x + y * nMapWidth; };
 
-  std::vector<int> traversable;
-  for (int i = 0; i < nMapWidth; i++)
-    for (int j = 0; j < nMapHeight; j++)
-      if (pMap[nMapWidth*j + i])
-        traversable.push_back(nMapWidth*j + i);
+    const int n         = nMapWidth * nMapHeight;
+    const int startPos  = idx(nStartX, nStartY),
+              targetPos = idx(nTargetX, nTargetY);
 
-  while (Landmarks.size() < k) {
-
-    if (Landmarks.empty()) {
-      std::random_device rng;
-      std::uniform_int_distribution<> uniform(0, traversable.size() - 1);
-      Landmarks.push_back(traversable[uniform(rng)]);
-      continue;
-    }
-
-    const int n = nMapWidth*nMapHeight;
+    ExploredNodes = 0;
     std::vector<int> p(n), d(n, INT_MAX);
-    std::queue<int> q;
-    for (auto s : Landmarks) {
-      d[s] = 0;
-      q.push(s);
-    }
-    int farthest = -1, maxdist = -1;
+    std::queue<int>  q;
+    d[startPos] = 0;
+    q.push(startPos);
     while (!q.empty()) {
-      int u = q.front(); q.pop();
-      if (d[u] > maxdist)
-        maxdist = d[u], farthest = u;
-      for (auto e : {-nMapWidth-1, -nMapWidth+1, +nMapWidth-1, +nMapWidth+1,
-          +1, -1, +nMapWidth, -nMapWidth}) {
-        int v = u + e;
-        if (((e == 1 || e == -nMapWidth+1 || e == nMapWidth+1) && (v % nMapWidth == 0))
-            || ((e == -1 || e == -nMapWidth-1 || e == nMapWidth-1) && (u % nMapWidth == 0)))
-          continue;
-        if (0 <= v && v < n && d[v] == INT_MAX && pMap[v]) {
-          p[v] = u;
-          d[v] = d[u] + 1;
-          q.push(v);
+        int u = q.front();
+        q.pop();
+        ExploredNodes++;
+        for (auto e :
+             {-nMapWidth - 1, -nMapWidth + 1, +nMapWidth - 1, +nMapWidth + 1,
+              +1, -1, +nMapWidth, -nMapWidth}) {
+            int v = u + e;
+            if (((e == 1 || e == -nMapWidth + 1 || e == nMapWidth + 1) &&
+                 (v % nMapWidth == 0)) ||
+                ((e == -1 || e == -nMapWidth - 1 || e == nMapWidth - 1) &&
+                 (u % nMapWidth == 0)))
+                continue;
+            if (0 <= v && v < n && d[v] == INT_MAX && pMap[v]) {
+                p[v] = u;
+                d[v] = d[u] + 1;
+                if (v == targetPos) goto end;
+                q.push(v);
+            }
         }
-      }
     }
+end:
 
-    Landmarks.push_back(farthest); // works well when the graph is not too disconnected
-  }
-
-  LD.resize(Landmarks.size());
-  for (int i = 0; i < Landmarks.size(); i++) {
-    const int n = nMapWidth*nMapHeight;
-    std::vector<int> p(n); LD[i].resize(n, INT_MAX);
-    std::queue<int> q;
-    int s = Landmarks[i];
-    LD[i][s] = 0;
-    q.push(s);
-    while (!q.empty()) {
-      int u = q.front(); q.pop();
-      for (auto e : {-nMapWidth-1, -nMapWidth+1, +nMapWidth-1, +nMapWidth+1,
-            +1, -1, +nMapWidth, -nMapWidth}) {
-        int v = u + e;
-        if (((e == 1 || e == -nMapWidth+1 || e == nMapWidth+1) && (v % nMapWidth == 0))
-            || ((e == -1 || e == -nMapWidth-1 || e == nMapWidth-1) && (u % nMapWidth == 0)))
-          continue;
-        if (0 <= v && v < n && LD[i][v] == INT_MAX && pMap[v]) {
-          p[v] = u;
-          LD[i][v] = LD[i][u] + 1;
-          q.push(v);
+    if (d[targetPos] == INT_MAX) {
+        return -1;
+    } else if (d[targetPos] <= nOutBufferSize) {
+        int curr = targetPos;
+        for (int i = d[targetPos] - 1; i >= 0; i--) {
+            pOutBuffer[i] = curr;
+            curr          = p[curr];
         }
-      }
+        return d[targetPos];
     }
-  }
+
+    return d[targetPos];  // buffer size too small
 }
 
-int AStarFindPathLandmarksDiag(const int nStartX, const int nStartY,
-          const int nTargetX, const int nTargetY,
-          const unsigned char* pMap, const int nMapWidth, const int nMapHeight,
-          int* pOutBuffer, const int nOutBufferSize) {
+int AStarFindPath(
+    const int            nStartX,
+    const int            nStartY,
+    const int            nTargetX,
+    const int            nTargetY,
+    const unsigned char* pMap,
+    const int            nMapWidth,
+    const int            nMapHeight,
+    int*                 pOutBuffer,
+    const int            nOutBufferSize
+) {
+    auto idx = [nMapWidth](int x, int y) { return x + y * nMapWidth; };
 
-  auto idx = [nMapWidth](int x, int y) {
-    return x + y*nMapWidth;
-  };
+    auto h = [=](int u) -> int {  // lower bound distance to target from u
+        int x = u % nMapWidth, y = u / nMapWidth;
+        return abs(x - nTargetX) + abs(y - nTargetY);
+    };
 
-  const int n = nMapWidth*nMapHeight;
-  const int startPos = idx(nStartX, nStartY), targetPos = idx(nTargetX, nTargetY);
+    const int n         = nMapWidth * nMapHeight;
+    const int startPos  = idx(nStartX, nStartY),
+              targetPos = idx(nTargetX, nTargetY);
 
-  auto h = [=](int u) { // lower bound distance to target from u
-    int m = 0;
-    for (int i = 0; i < Landmarks.size(); i++) // global std::vector<int> Landmarks
-      m = std::max(m, LD[i][targetPos] - LD[i][u]); // global std::vector<std::vector<int>> LD
-    return m;
-  };
-
-  int discovered = 0; ExploredNodes = 0;
-  std::vector<int> p(n), d(n, INT_MAX);
-  std::priority_queue<std::tuple<int, int, int>,
-      std::vector<std::tuple<int, int, int>>,
-      std::greater<std::tuple<int, int, int>>> pq; // A* with tie breaking
-  d[startPos] = 0;
-  pq.push(std::make_tuple(0 + h(startPos), 0, startPos));
-  while (!pq.empty()) {
-    int u = std::get<2>(pq.top()); pq.pop(); ExploredNodes++;
-    for (auto e : {-nMapWidth-1, -nMapWidth+1, +nMapWidth-1, +nMapWidth+1,
-          +1, -1, +nMapWidth, -nMapWidth}) {
-      int v = u + e;
-      if (((e == 1 || e == -nMapWidth+1 || e == nMapWidth+1) && (v % nMapWidth == 0))
-          || ((e == -1 || e == -nMapWidth-1 || e == nMapWidth-1) && (u % nMapWidth == 0)))
-        continue;
-  
-      if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
-        p[v] = u;
-        d[v] = d[u] + 1;
-        if (v == targetPos)
-          goto end;
-        pq.push(std::make_tuple(d[v] + h(v), ++discovered, v));
-      }
+    int discovered = 0;
+    ExploredNodes  = 0;
+    std::vector<int> p(n), d(n, INT_MAX);
+    std::priority_queue<
+        std::tuple<int, int, int>, std::vector<std::tuple<int, int, int>>,
+        std::greater<std::tuple<int, int, int>>>
+        pq;  // A* with tie breaking
+    d[startPos] = 0;
+    pq.push(std::make_tuple(0 + h(startPos), 0, startPos));
+    while (!pq.empty()) {
+        int u = std::get<2>(pq.top());
+        pq.pop();
+        ExploredNodes++;
+        for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
+            int v = u + e;
+            if ((e == 1 && (v % nMapWidth == 0)) ||
+                (e == -1 && (u % nMapWidth == 0)))
+                continue;
+            if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
+                p[v] = u;
+                d[v] = d[u] + 1;
+                if (v == targetPos) goto end;
+                pq.push(std::make_tuple(d[v] + h(v), ++discovered, v));
+            }
+        }
     }
-  }
-  end:
+end:
 
-  if (d[targetPos] == INT_MAX) {
-    return -1;
-  } else if (d[targetPos] <= nOutBufferSize) {
-    int curr = targetPos;
-    for (int i = d[targetPos] - 1; i >= 0; i--) {
-      pOutBuffer[i] = curr;
-      curr = p[curr];
+    if (d[targetPos] == INT_MAX) {
+        return -1;
+    } else if (d[targetPos] <= nOutBufferSize) {
+        int curr = targetPos;
+        for (int i = d[targetPos] - 1; i >= 0; i--) {
+            pOutBuffer[i] = curr;
+            curr          = p[curr];
+        }
+        return d[targetPos];
     }
-    return d[targetPos];
-  }
 
-  return d[targetPos]; // buffer size too small
+    return d[targetPos];  // buffer size too small
 }
 
-int AStarFindPathNoTie(const int nStartX, const int nStartY,
-         const int nTargetX, const int nTargetY,
-         const unsigned char* pMap, const int nMapWidth, const int nMapHeight,
-         int* pOutBuffer, const int nOutBufferSize) {
+int AStarFindPathDiag(
+    const int            nStartX,
+    const int            nStartY,
+    const int            nTargetX,
+    const int            nTargetY,
+    const unsigned char* pMap,
+    const int            nMapWidth,
+    const int            nMapHeight,
+    int*                 pOutBuffer,
+    const int            nOutBufferSize
+) {
+    auto idx = [nMapWidth](int x, int y) { return x + y * nMapWidth; };
 
-  auto idx = [nMapWidth](int x, int y) {
-    return x + y*nMapWidth;
-  };
+    auto h = [=](int u) -> int {  // lower bound distance to target from u
+        int x = u % nMapWidth, y = u / nMapWidth;
+        return std::max(abs(x - nTargetX), abs(y - nTargetY));
+    };
 
-  auto h = [=](int u) { // lower bound distance to target from u
-    int x = u % nMapWidth, y = u / nMapWidth;
-    return abs(x-nTargetX) + abs(y-nTargetY);
-  };
+    const int n         = nMapWidth * nMapHeight;
+    const int startPos  = idx(nStartX, nStartY),
+              targetPos = idx(nTargetX, nTargetY);
 
-  const int n = nMapWidth*nMapHeight;
-  const int startPos = idx(nStartX, nStartY), targetPos = idx(nTargetX, nTargetY);
-
-  ExploredNodes = 0;
-  std::vector<int> p(n), d(n, INT_MAX);
-  std::priority_queue<std::pair<int, int>,
-      std::vector<std::pair<int, int>>,
-      std::greater<std::pair<int, int>>> pq;
-  d[startPos] = 0;
-  pq.push(std::make_pair(0 + h(startPos), startPos));
-  while (!pq.empty()) {
-    int u = pq.top().second; pq.pop(); ExploredNodes++;
-    for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
-      int v = u + e;
-      if ((e == 1 && (v % nMapWidth == 0)) || (e == -1 && (u % nMapWidth == 0)))
-        continue;
-      if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
-        p[v] = u;
-        d[v] = d[u] + 1;
-        if (v == targetPos)
-          goto end;
-        pq.push(std::make_pair(d[v] + h(v), v));
-      }
+    int discovered = 0;
+    ExploredNodes  = 0;
+    std::vector<int> p(n), d(n, INT_MAX);
+    std::priority_queue<
+        std::tuple<int, int, int>, std::vector<std::tuple<int, int, int>>,
+        std::greater<std::tuple<int, int, int>>>
+        pq;  // A* with tie breaking
+    d[startPos] = 0;
+    pq.push(std::make_tuple(0 + h(startPos), 0, startPos));
+    while (!pq.empty()) {
+        int u = std::get<2>(pq.top());
+        pq.pop();
+        ExploredNodes++;
+        for (auto e :
+             {-nMapWidth - 1, -nMapWidth + 1, +nMapWidth - 1, +nMapWidth + 1,
+              +1, -1, +nMapWidth, -nMapWidth}) {
+            int v = u + e;
+            if (((e == 1 || e == -nMapWidth + 1 || e == nMapWidth + 1) &&
+                 (v % nMapWidth == 0)) ||
+                ((e == -1 || e == -nMapWidth - 1 || e == nMapWidth - 1) &&
+                 (u % nMapWidth == 0)))
+                continue;
+            if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
+                p[v] = u;
+                d[v] = d[u] + 1;
+                if (v == targetPos) goto end;
+                pq.push(std::make_tuple(d[v] + h(v), ++discovered, v));
+            }
+        }
     }
-  }
-  end:
+end:
 
-  if (d[targetPos] == INT_MAX) {
-    return -1;
-  } else if (d[targetPos] <= nOutBufferSize) {
-    int curr = targetPos;
-    for (int i = d[targetPos] - 1; i >= 0; i--) {
-      pOutBuffer[i] = curr;
-      curr = p[curr];
+    if (d[targetPos] == INT_MAX) {
+        return -1;
+    } else if (d[targetPos] <= nOutBufferSize) {
+        int curr = targetPos;
+        for (int i = d[targetPos] - 1; i >= 0; i--) {
+            pOutBuffer[i] = curr;
+            curr          = p[curr];
+        }
+        return d[targetPos];
     }
-    return d[targetPos];
-  }
 
-  return d[targetPos]; // buffer size too small
+    return d[targetPos];  // buffer size too small
 }
 
-int AStarFindPathNoTieDiag(const int nStartX, const int nStartY,
-       const int nTargetX, const int nTargetY,
-       const unsigned char* pMap, const int nMapWidth, const int nMapHeight,
-       int* pOutBuffer, const int nOutBufferSize) {
+void InitializeLandmarks(
+    int k, const unsigned char* pMap, const int nMapWidth, const int nMapHeight
+) {
+    std::vector<int> traversable;
+    for (int i = 0; i < nMapWidth; i++)
+        for (int j = 0; j < nMapHeight; j++)
+            if (pMap[nMapWidth * j + i])
+                traversable.push_back(nMapWidth * j + i);
 
-  auto idx = [nMapWidth](int x, int y) {
-    return x + y*nMapWidth;
-  };
+    while (Landmarks.size() < k) {
+        if (Landmarks.empty()) {
+            std::random_device              rng;
+            std::uniform_int_distribution<> uniform(0, traversable.size() - 1);
+            Landmarks.push_back(traversable[uniform(rng)]);
+            continue;
+        }
 
-  auto h = [=](int u) { // lower bound distance to target from u
-    int x = u % nMapWidth, y = u / nMapWidth;
-    return std::max(abs(x-nTargetX), abs(y-nTargetY));
-  };
+        const int        n = nMapWidth * nMapHeight;
+        std::vector<int> p(n), d(n, INT_MAX);
+        std::queue<int>  q;
+        for (auto s : Landmarks) {
+            d[s] = 0;
+            q.push(s);
+        }
+        int farthest = -1, maxdist = -1;
 
-  const int n = nMapWidth*nMapHeight;
-  const int startPos = idx(nStartX, nStartY), targetPos = idx(nTargetX, nTargetY);
+        while (!q.empty()) {
+            int u = q.front();
+            q.pop();
+            if (d[u] > maxdist) maxdist = d[u], farthest = u;
+            for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
+                int v = u + e;
+                if ((e == 1 && (v % nMapWidth == 0)) ||
+                    (e == -1 && (u % nMapWidth == 0)))
+                    continue;
+                if (0 <= v && v < n && d[v] == INT_MAX && pMap[v]) {
+                    p[v] = u;
+                    d[v] = d[u] + 1;
+                    q.push(v);
+                }
+            }
+        }
 
-  ExploredNodes = 0;
-  std::vector<int> p(n), d(n, INT_MAX);
-  std::priority_queue<std::pair<int, int>,
-      std::vector<std::pair<int, int>>,
-      std::greater<std::pair<int, int>>> pq;
-  d[startPos] = 0;
-  pq.push(std::make_pair(0 + h(startPos), startPos));
-  while (!pq.empty()) {
-    int u = pq.top().second; pq.pop(); ExploredNodes++;
-    for (auto e : {-nMapWidth-1, -nMapWidth+1, +nMapWidth-1, +nMapWidth+1,
-        +1, -1, +nMapWidth, -nMapWidth}) {
-      int v = u + e;
-      if (((e == 1 || e == -nMapWidth+1 || e == nMapWidth+1) && (v % nMapWidth == 0))
-        || ((e == -1 || e == -nMapWidth-1 || e == nMapWidth-1) && (u % nMapWidth == 0)))
-        continue;
-      if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
-        p[v] = u;
-        d[v] = d[u] + 1;
-        if (v == targetPos)
-          goto end;
-        pq.push(std::make_pair(d[v] + h(v), v));
-      }
+        Landmarks.push_back(farthest
+        );  // works well when the graph is not too disconnected
     }
-  }
-  end:
 
-  if (d[targetPos] == INT_MAX) {
-    return -1;
-  } else if (d[targetPos] <= nOutBufferSize) {
-    int curr = targetPos;
-    for (int i = d[targetPos] - 1; i >= 0; i--) {
-      pOutBuffer[i] = curr;
-      curr = p[curr];
+    LD.resize(Landmarks.size());
+    for (int i = 0; i < Landmarks.size(); i++) {
+        const int        n = nMapWidth * nMapHeight;
+        std::vector<int> p(n);
+        LD[i].resize(n, INT_MAX);
+        std::queue<int> q;
+        int             s = Landmarks[i];
+        LD[i][s]          = 0;
+        q.push(s);
+        while (!q.empty()) {
+            int u = q.front();
+            q.pop();
+            for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
+                int v = u + e;
+                if ((e == 1 && (v % nMapWidth == 0)) ||
+                    (e == -1 && (u % nMapWidth == 0)))
+                    continue;
+                if (0 <= v && v < n && LD[i][v] == INT_MAX && pMap[v]) {
+                    p[v]     = u;
+                    LD[i][v] = LD[i][u] + 1;
+                    q.push(v);
+                }
+            }
+        }
     }
-    return d[targetPos];
-  }
+}
 
-  return d[targetPos]; // buffer size too small
+int AStarFindPathLandmarks(
+    const int            nStartX,
+    const int            nStartY,
+    const int            nTargetX,
+    const int            nTargetY,
+    const unsigned char* pMap,
+    const int            nMapWidth,
+    const int            nMapHeight,
+    int*                 pOutBuffer,
+    const int            nOutBufferSize
+) {
+    auto idx = [nMapWidth](int x, int y) { return x + y * nMapWidth; };
+
+    const int n         = nMapWidth * nMapHeight;
+    const int startPos  = idx(nStartX, nStartY),
+              targetPos = idx(nTargetX, nTargetY);
+
+    auto h = [=](int u) {  // lower bound distance to target from u
+        int m = 0;
+        for (int i = 0; i < Landmarks.size();
+             i++)  // global std::vector<int> Landmarks
+            m = std::max(
+                m, LD[i][targetPos] - LD[i][u]
+            );  // global std::vector<std::vector<int>> LD
+        return m;
+    };
+
+    int discovered = 0;
+    ExploredNodes  = 0;
+    std::vector<int> p(n), d(n, INT_MAX);
+    std::priority_queue<
+        std::tuple<int, int, int>, std::vector<std::tuple<int, int, int>>,
+        std::greater<std::tuple<int, int, int>>>
+        pq;  // A* with tie breaking
+    d[startPos] = 0;
+    pq.push(std::make_tuple(0 + h(startPos), 0, startPos));
+    while (!pq.empty()) {
+        int u = std::get<2>(pq.top());
+        pq.pop();
+        ExploredNodes++;
+        for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
+            int v = u + e;
+            if ((e == 1 && (v % nMapWidth == 0)) ||
+                (e == -1 && (u % nMapWidth == 0)))
+                continue;
+            if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
+                p[v] = u;
+                d[v] = d[u] + 1;
+                if (v == targetPos) goto end;
+                pq.push(std::make_tuple(d[v] + h(v), ++discovered, v));
+            }
+        }
+    }
+end:
+
+    if (d[targetPos] == INT_MAX) {
+        return -1;
+    } else if (d[targetPos] <= nOutBufferSize) {
+        int curr = targetPos;
+        for (int i = d[targetPos] - 1; i >= 0; i--) {
+            pOutBuffer[i] = curr;
+            curr          = p[curr];
+        }
+        return d[targetPos];
+    }
+
+    return d[targetPos];  // buffer size too small
+}
+
+void InitializeLandmarksDiag(
+    int k, const unsigned char* pMap, const int nMapWidth, const int nMapHeight
+) {
+    std::vector<int> traversable;
+    for (int i = 0; i < nMapWidth; i++)
+        for (int j = 0; j < nMapHeight; j++)
+            if (pMap[nMapWidth * j + i])
+                traversable.push_back(nMapWidth * j + i);
+
+    while (Landmarks.size() < k) {
+        if (Landmarks.empty()) {
+            std::random_device              rng;
+            std::uniform_int_distribution<> uniform(0, traversable.size() - 1);
+            Landmarks.push_back(traversable[uniform(rng)]);
+            continue;
+        }
+
+        const int        n = nMapWidth * nMapHeight;
+        std::vector<int> p(n), d(n, INT_MAX);
+        std::queue<int>  q;
+        for (auto s : Landmarks) {
+            d[s] = 0;
+            q.push(s);
+        }
+        int farthest = -1, maxdist = -1;
+        while (!q.empty()) {
+            int u = q.front();
+            q.pop();
+            if (d[u] > maxdist) maxdist = d[u], farthest = u;
+            for (auto e :
+                 {-nMapWidth - 1, -nMapWidth + 1, +nMapWidth - 1,
+                  +nMapWidth + 1, +1, -1, +nMapWidth, -nMapWidth}) {
+                int v = u + e;
+                if (((e == 1 || e == -nMapWidth + 1 || e == nMapWidth + 1) &&
+                     (v % nMapWidth == 0)) ||
+                    ((e == -1 || e == -nMapWidth - 1 || e == nMapWidth - 1) &&
+                     (u % nMapWidth == 0)))
+                    continue;
+                if (0 <= v && v < n && d[v] == INT_MAX && pMap[v]) {
+                    p[v] = u;
+                    d[v] = d[u] + 1;
+                    q.push(v);
+                }
+            }
+        }
+
+        Landmarks.push_back(farthest
+        );  // works well when the graph is not too disconnected
+    }
+
+    LD.resize(Landmarks.size());
+    for (int i = 0; i < Landmarks.size(); i++) {
+        const int        n = nMapWidth * nMapHeight;
+        std::vector<int> p(n);
+        LD[i].resize(n, INT_MAX);
+        std::queue<int> q;
+        int             s = Landmarks[i];
+        LD[i][s]          = 0;
+        q.push(s);
+        while (!q.empty()) {
+            int u = q.front();
+            q.pop();
+            for (auto e :
+                 {-nMapWidth - 1, -nMapWidth + 1, +nMapWidth - 1,
+                  +nMapWidth + 1, +1, -1, +nMapWidth, -nMapWidth}) {
+                int v = u + e;
+                if (((e == 1 || e == -nMapWidth + 1 || e == nMapWidth + 1) &&
+                     (v % nMapWidth == 0)) ||
+                    ((e == -1 || e == -nMapWidth - 1 || e == nMapWidth - 1) &&
+                     (u % nMapWidth == 0)))
+                    continue;
+                if (0 <= v && v < n && LD[i][v] == INT_MAX && pMap[v]) {
+                    p[v]     = u;
+                    LD[i][v] = LD[i][u] + 1;
+                    q.push(v);
+                }
+            }
+        }
+    }
+}
+
+int AStarFindPathLandmarksDiag(
+    const int            nStartX,
+    const int            nStartY,
+    const int            nTargetX,
+    const int            nTargetY,
+    const unsigned char* pMap,
+    const int            nMapWidth,
+    const int            nMapHeight,
+    int*                 pOutBuffer,
+    const int            nOutBufferSize
+) {
+    auto idx = [nMapWidth](int x, int y) { return x + y * nMapWidth; };
+
+    const int n         = nMapWidth * nMapHeight;
+    const int startPos  = idx(nStartX, nStartY),
+              targetPos = idx(nTargetX, nTargetY);
+
+    auto h = [=](int u) {  // lower bound distance to target from u
+        int m = 0;
+        for (int i = 0; i < Landmarks.size();
+             i++)  // global std::vector<int> Landmarks
+            m = std::max(
+                m, LD[i][targetPos] - LD[i][u]
+            );  // global std::vector<std::vector<int>> LD
+        return m;
+    };
+
+    int discovered = 0;
+    ExploredNodes  = 0;
+    std::vector<int> p(n), d(n, INT_MAX);
+    std::priority_queue<
+        std::tuple<int, int, int>, std::vector<std::tuple<int, int, int>>,
+        std::greater<std::tuple<int, int, int>>>
+        pq;  // A* with tie breaking
+    d[startPos] = 0;
+    pq.push(std::make_tuple(0 + h(startPos), 0, startPos));
+    while (!pq.empty()) {
+        int u = std::get<2>(pq.top());
+        pq.pop();
+        ExploredNodes++;
+        for (auto e :
+             {-nMapWidth - 1, -nMapWidth + 1, +nMapWidth - 1, +nMapWidth + 1,
+              +1, -1, +nMapWidth, -nMapWidth}) {
+            int v = u + e;
+            if (((e == 1 || e == -nMapWidth + 1 || e == nMapWidth + 1) &&
+                 (v % nMapWidth == 0)) ||
+                ((e == -1 || e == -nMapWidth - 1 || e == nMapWidth - 1) &&
+                 (u % nMapWidth == 0)))
+                continue;
+
+            if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
+                p[v] = u;
+                d[v] = d[u] + 1;
+                if (v == targetPos) goto end;
+                pq.push(std::make_tuple(d[v] + h(v), ++discovered, v));
+            }
+        }
+    }
+end:
+
+    if (d[targetPos] == INT_MAX) {
+        return -1;
+    } else if (d[targetPos] <= nOutBufferSize) {
+        int curr = targetPos;
+        for (int i = d[targetPos] - 1; i >= 0; i--) {
+            pOutBuffer[i] = curr;
+            curr          = p[curr];
+        }
+        return d[targetPos];
+    }
+
+    return d[targetPos];  // buffer size too small
+}
+
+int AStarFindPathNoTie(
+    const int            nStartX,
+    const int            nStartY,
+    const int            nTargetX,
+    const int            nTargetY,
+    const unsigned char* pMap,
+    const int            nMapWidth,
+    const int            nMapHeight,
+    int*                 pOutBuffer,
+    const int            nOutBufferSize
+) {
+    auto idx = [nMapWidth](int x, int y) { return x + y * nMapWidth; };
+
+    auto h = [=](int u) {  // lower bound distance to target from u
+        int x = u % nMapWidth, y = u / nMapWidth;
+        return abs(x - nTargetX) + abs(y - nTargetY);
+    };
+
+    const int n         = nMapWidth * nMapHeight;
+    const int startPos  = idx(nStartX, nStartY),
+              targetPos = idx(nTargetX, nTargetY);
+
+    ExploredNodes = 0;
+    std::vector<int> p(n), d(n, INT_MAX);
+    std::priority_queue<
+        std::pair<int, int>, std::vector<std::pair<int, int>>,
+        std::greater<std::pair<int, int>>>
+        pq;
+    d[startPos] = 0;
+    pq.push(std::make_pair(0 + h(startPos), startPos));
+    while (!pq.empty()) {
+        int u = pq.top().second;
+        pq.pop();
+        ExploredNodes++;
+        for (auto e : {+1, -1, +nMapWidth, -nMapWidth}) {
+            int v = u + e;
+            if ((e == 1 && (v % nMapWidth == 0)) ||
+                (e == -1 && (u % nMapWidth == 0)))
+                continue;
+            if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
+                p[v] = u;
+                d[v] = d[u] + 1;
+                if (v == targetPos) goto end;
+                pq.push(std::make_pair(d[v] + h(v), v));
+            }
+        }
+    }
+end:
+
+    if (d[targetPos] == INT_MAX) {
+        return -1;
+    } else if (d[targetPos] <= nOutBufferSize) {
+        int curr = targetPos;
+        for (int i = d[targetPos] - 1; i >= 0; i--) {
+            pOutBuffer[i] = curr;
+            curr          = p[curr];
+        }
+        return d[targetPos];
+    }
+
+    return d[targetPos];  // buffer size too small
+}
+
+int AStarFindPathNoTieDiag(
+    const int            nStartX,
+    const int            nStartY,
+    const int            nTargetX,
+    const int            nTargetY,
+    const unsigned char* pMap,
+    const int            nMapWidth,
+    const int            nMapHeight,
+    int*                 pOutBuffer,
+    const int            nOutBufferSize
+) {
+    auto idx = [nMapWidth](int x, int y) { return x + y * nMapWidth; };
+
+    auto h = [=](int u) {  // lower bound distance to target from u
+        int x = u % nMapWidth, y = u / nMapWidth;
+        return std::max(abs(x - nTargetX), abs(y - nTargetY));
+    };
+
+    const int n         = nMapWidth * nMapHeight;
+    const int startPos  = idx(nStartX, nStartY),
+              targetPos = idx(nTargetX, nTargetY);
+
+    ExploredNodes = 0;
+    std::vector<int> p(n), d(n, INT_MAX);
+    std::priority_queue<
+        std::pair<int, int>, std::vector<std::pair<int, int>>,
+        std::greater<std::pair<int, int>>>
+        pq;
+    d[startPos] = 0;
+    pq.push(std::make_pair(0 + h(startPos), startPos));
+    while (!pq.empty()) {
+        int u = pq.top().second;
+        pq.pop();
+        ExploredNodes++;
+        for (auto e :
+             {-nMapWidth - 1, -nMapWidth + 1, +nMapWidth - 1, +nMapWidth + 1,
+              +1, -1, +nMapWidth, -nMapWidth}) {
+            int v = u + e;
+            if (((e == 1 || e == -nMapWidth + 1 || e == nMapWidth + 1) &&
+                 (v % nMapWidth == 0)) ||
+                ((e == -1 || e == -nMapWidth - 1 || e == nMapWidth - 1) &&
+                 (u % nMapWidth == 0)))
+                continue;
+            if (0 <= v && v < n && d[v] > d[u] + 1 && pMap[v]) {
+                p[v] = u;
+                d[v] = d[u] + 1;
+                if (v == targetPos) goto end;
+                pq.push(std::make_pair(d[v] + h(v), v));
+            }
+        }
+    }
+end:
+
+    if (d[targetPos] == INT_MAX) {
+        return -1;
+    } else if (d[targetPos] <= nOutBufferSize) {
+        int curr = targetPos;
+        for (int i = d[targetPos] - 1; i >= 0; i--) {
+            pOutBuffer[i] = curr;
+            curr          = p[curr];
+        }
+        return d[targetPos];
+    }
+
+    return d[targetPos];  // buffer size too small
 }
