@@ -10,6 +10,8 @@
 #include <tuple>
 #include <vector>
 
+#include "../util.h"
+
 bool AStarFindPath(
     const std::pair<int, int>&        start,
     const std::pair<int, int>&        target,
@@ -17,6 +19,31 @@ bool AStarFindPath(
     const std::pair<int, int>&        mapSize,
     std::vector<int>&                 outBuffer
 );
+
+void debugLogDistanceMap(
+    const std::vector<int>&           dist,
+    const std::vector<unsigned char>& map,
+    const std::pair<int, int>&        mapSize,
+    const std::pair<int, int>&        start,
+    const std::pair<int, int>&        target
+) {
+    for (int i = 0; i < mapSize.first * mapSize.second; i++) {
+        if (i == start.first + start.second * mapSize.first) {
+            fmt::print(" S ");
+        } else if (i == target.first + target.second * mapSize.first) {
+            fmt::print(" T ");
+        } else if (map[i] == 0) {
+            fmt::print(" X ");
+        } else if (dist[i] == INT_MAX) {
+            fmt::print(" _ ");
+        } else {
+            fmt::print("{:2} ", dist[i]);
+        }
+        if ((i + 1) % mapSize.first == 0) {
+            fmt::print("\n");
+        }
+    }
+}
 
 // Function to find a path using the A* algorithm
 bool AStarFindPath(
@@ -37,6 +64,34 @@ bool AStarFindPath(
         return std::make_pair(idx % nMapWidth, idx / nMapWidth);
     };
 
+    // Check if the start and target positions are within bounds
+    if (nStartX < 0 || nStartX >= nMapWidth || nStartY < 0 ||
+        nStartY >= nMapHeight || nTargetX < 0 || nTargetX >= nMapWidth ||
+        nTargetY < 0 || nTargetY >= nMapHeight) {
+        return false;
+    }
+
+    // Check if start position is traversable
+    if (!map[idx(nStartX, nStartY)]) {
+        fmt::println("Start position is not traversable.");
+        exit(1);
+        return false;
+    }
+
+    // Check if target position is traversable
+    if (!map[idx(nTargetX, nTargetY)]) {
+        fmt::println("Target position is not traversable.");
+        exit(1);
+        return false;
+    }
+
+    // Check if start and target positions are the same
+    if (nStartX == nTargetX && nStartY == nTargetY) {
+        fmt::println("Start and target positions are the same.");
+        exit(1);
+        return false;
+    }
+
     // Heuristic function to estimate the distance to the target from a given
     // position
     auto heuristic = [=](int u) -> int {
@@ -44,9 +99,10 @@ bool AStarFindPath(
         return abs(x - nTargetX) + abs(y - nTargetY);
     };
 
-    const int startPos  = idx(nStartX, nStartY);    // Start position in 1D index
-    const int targetPos = idx(nTargetX, nTargetY);  // Target position in 1D index
-    const int n         = nMapWidth * nMapHeight;   // Total number of cells in the map
+    const int startPos = idx(nStartX, nStartY);  // Start position in 1D index
+    const int targetPos =
+        idx(nTargetX, nTargetY);           // Target position in 1D index
+    const int n = nMapWidth * nMapHeight;  // Total number of cells in the map
     assert(n == map.size());
 
     int              discovered    = 0;  // Counter for discovered nodes
@@ -63,39 +119,51 @@ bool AStarFindPath(
     // Priority queue for the A* algorithm, ordered by the cost
     std::priority_queue<pq_t, std::vector<pq_t>, std::greater<pq_t>> pq;
 
-    dist[startPos] = 0;  // Distance to the start position is 0
-    pq.push({0 + heuristic(startPos), 0, startPos}
-    );  // Push the start position into the priority queue
+    // Push the start position into the priority queue
+    pq.push({0 + heuristic(startPos), 0, startPos});
+    dist[startPos] = 0;
 
     // Main loop of the A* algorithm
     while (!pq.empty()) {
-        int node = std::get<2>(pq.top());  // Get the position with the lowest cost
-        pq.pop();                          // Remove the position from the priority queue
-        exploredNodes++;                   // Increment the explored nodes counter
+        // Get the position with the lowest cost
+        int node = std::get<2>(pq.top());
+        pq.pop();
+        exploredNodes++;
 
         // Iterate over the possible moves (right, left, down, up)
-        for (auto edge : {+1, -1, +nMapWidth, -nMapWidth}) {
+        for (int edge : {+1, -1, +nMapWidth, -nMapWidth}) {
             int nextNode = node + edge;  // Calculate the new position
             // Check if the move is valid (not wrapping around the map edges)
             if ((edge == 1 && (nextNode % nMapWidth == 0)) ||
                 (edge == -1 && (node % nMapWidth == 0)))
                 continue;
-            // Check if the new position is within bounds, not visited yet, and is
-            // traversable
-            if (0 <= nextNode && nextNode < n && dist[nextNode] > dist[node] + 1 && map[nextNode]) {
-                path[nextNode] = node;            // Set the predecessor of the new position
-                dist[nextNode] = dist[node] + 1;  // Update the distance to the new position
+            // Check if the new position is within bounds, not visited yet, and
+            // is traversable
+            if (0 <= nextNode && nextNode < n &&
+                dist[nextNode] > dist[node] + 1 && map[nextNode]) {
+                path[nextNode] =
+                    node;  // Set the predecessor of the new position
+                dist[nextNode] =
+                    dist[node] + 1;  // Update the distance to the new position
                 if (nextNode == targetPos) {
                     // If the target is reached, exit the loop
                     goto end;
                 }
                 // Push the new position into the priority queue
-                pq.push({dist[nextNode] + heuristic(nextNode), ++discovered, nextNode});
+                pq.push(
+                    {dist[nextNode] + heuristic(nextNode), ++discovered,
+                     nextNode}
+                );
             }
         }
     }
 
 end:
+    debugLogDistanceMap(
+        dist, map, {nMapWidth, nMapHeight}, {nStartX, nStartY},
+        {nTargetX, nTargetY}
+    );
+
     // Check if the target position was reached
     if (dist[targetPos] == INT_MAX) {
         return false;
@@ -121,8 +189,8 @@ bool AStarFindPath(
     std::vector<int>&                 outBuffer
 ) {
     return AStarFindPath(
-        start.first, start.second, target.first, target.second, map, mapSize.first, mapSize.second,
-        outBuffer
+        start.first, start.second, target.first, target.second, map,
+        mapSize.first, mapSize.second, outBuffer
     );
 }
 
@@ -139,7 +207,9 @@ void TestSimplePath() {
     bool             result = AStarFindPath({0, 0}, {4, 4}, map, {5, 5}, path);
 
     assert(result == true);
-    assert(path.size() == 8);  // The length of the shortest path (Manhattan distance in this case)
+    assert(
+        path.size() == 8
+    );  // The length of the shortest path (Manhattan distance in this case)
     fmt::println("TestSimplePath passed.");
 }
 
@@ -158,7 +228,8 @@ void TestPathWithObstacle() {
     assert(result == true);
     fmt::println("Path with obstacle: {}", path);
     assert(path.size() == 12);
-    std::vector<int> expectedPath = {5, 10, 15, 16, 17, 12, 7, 8, 9, 14, 19, 24};
+    std::vector<int> expectedPath = {5, 10, 15, 16, 17, 12,
+                                     7, 8,  9,  14, 19, 24};
     assert(path == expectedPath);
     fmt::println("TestPathWithObstacle passed.");
 }
