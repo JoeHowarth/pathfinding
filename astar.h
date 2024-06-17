@@ -3,10 +3,13 @@
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 
+#include <chrono>
 #include <climits>
 #include <cstdlib>
+#include <iostream>
 #include <queue>
 #include <random>
+#include <thread>
 #include <tuple>
 #include <vector>
 
@@ -73,22 +76,22 @@ bool AStarFindPath(
 
     // Check if start position is traversable
     if (!map[idx(nStartX, nStartY)]) {
-        fmt::println("Start position is not traversable.");
-        exit(1);
+        fmt::println("Start position is not traversable: {}, {}", nStartX, nStartY);
+        std::this_thread::sleep_for(std::chrono::seconds(1000));
         return false;
     }
 
     // Check if target position is traversable
     if (!map[idx(nTargetX, nTargetY)]) {
-        fmt::println("Target position is not traversable.");
-        exit(1);
+        fmt::println("Target position is not traversable: {}, {}", nTargetX, nTargetY);
+        std::this_thread::sleep_for(std::chrono::seconds(1000));
         return false;
     }
 
     // Check if start and target positions are the same
     if (nStartX == nTargetX && nStartY == nTargetY) {
-        fmt::println("Start and target positions are the same.");
-        exit(1);
+        fmt::println("Start and target positions are the same: {}, {}", nStartX, nStartY);
+        std::this_thread::sleep_for(std::chrono::seconds(1000));
         return false;
     }
 
